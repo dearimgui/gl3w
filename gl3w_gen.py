@@ -30,6 +30,7 @@ from __future__ import print_function
 
 import argparse
 import os
+import os.path
 import re
 
 # Try to import Python 3 library urllib.request
@@ -39,17 +40,22 @@ try:
 except ImportError:
     import urllib2
 
+
 EXT_SUFFIX = ['ARB', 'EXT', 'KHR', 'OVR', 'NV', 'AMD', 'INTEL']
+
 
 def is_ext(proc):
     return any(proc.endswith(suffix) for suffix in EXT_SUFFIX)
 
+
 def write(f, s):
     f.write(s.encode('utf-8'))
+
 
 def touch_dir(path):
     if not os.path.exists(path):
         os.makedirs(path)
+
 
 def download(url, dst):
     if os.path.exists(dst):
@@ -61,64 +67,165 @@ def download(url, dst):
     with open(dst, 'wb') as f:
         f.writelines(web.readlines())
 
-parser = argparse.ArgumentParser(description='gl3w generator script')
-parser.add_argument('--ext', action='store_true', help='Load extensions')
-parser.add_argument('--root', type=str, default='', help='Root directory')
-args = parser.parse_args()
 
-# Create directories
-touch_dir(os.path.join(args.root, 'include/GL'))
-touch_dir(os.path.join(args.root, 'include/KHR'))
-touch_dir(os.path.join(args.root, 'src'))
+class IfDefNode(object):
+    def __init__(self, parent=None):
+        self.children = []
+        self.parent = parent
+        if parent is not None:
+            parent.children.append(self)
 
-# Download glcorearb.h and khrplatform.h
-download('https://www.khronos.org/registry/OpenGL/api/GL/glcorearb.h',
-         os.path.join(args.root, 'include/GL/glcorearb.h'))
-download('https://www.khronos.org/registry/EGL/api/KHR/khrplatform.h',
-         os.path.join(args.root, 'include/KHR/khrplatform.h'))
+    def __str__(self):
+        if len(self.children):
+            return str(self.children[0])
+        return '<empty>'
 
-# Parse function names from glcorearb.h
-print('Parsing glcorearb.h header...')
-procs = []
-p = re.compile(r'GLAPI.*APIENTRY\s+(\w+)')
-with open(os.path.join(args.root, 'include/GL/glcorearb.h'), 'r') as f:
-    for line in f:
-        m = p.match(line)
-        if not m:
-            continue
-        proc = m.group(1)
-        if args.ext or not is_ext(proc):
-            procs.append(proc)
-procs.sort()
 
-# Generate gl3w.h
-print('Generating {0}...'.format(os.path.join(args.root, 'include/GL/gl3w.h')))
-with open(os.path.join(args.root, 'include/GL/gl3w.h'), 'wb') as f:
-    gl3w_h = open(os.path.join(args.root, 'template/gl3w.h'), 'r', encoding='utf-8').read()
-    strings = [
-        '/* gl3w internal state */',
-        'union GL3WProcs {',
-        '\tGL3WglProc ptr[{0}];'.format(len(procs)),
-        '\tstruct {'
-    ]
-    for proc in procs:
-        strings.append('\t\t{0: <55} {1};'.format('PFN{0}PROC'.format(proc.upper()), proc[2:]))
-    strings.append('\t} gl;')     # struct
-    strings.append('};')            # union GL3WProcs
-    gl3w_h = gl3w_h.replace(strings[0], '\n'.join(strings))
+def cull_empty(node):
+    new_children = []
+    for c in node.children:
+        if isinstance(c, str) or cull_empty(c):
+            new_children.append(c)
+    node.children = new_children
+    return len(node.children) > 2
 
-    strings = ['/* OpenGL functions */']
-    for proc in procs:
-        strings.append('#define {0: <48} gl3wProcs.gl.{1}'.format(proc, proc[2:]))
-    gl3w_h = gl3w_h.replace(strings[0], '\n'.join(strings))
-    write(f, gl3w_h)
 
-# Generate gl3w.c
-print('Generating {0}...'.format(os.path.join(args.root, 'src/gl3w.c')))
-with open(os.path.join(args.root, 'src/gl3w.c'), 'wb') as f:
-    gl3w_c = open(os.path.join(args.root, 'template/gl3w.c'), 'r', encoding='utf-8').read()
-    strings = ['static const char *proc_names[] = {']
-    for proc in procs:
-        strings.append('\t"{0}",'.format(proc))
-    gl3w_c = gl3w_c.replace(strings[0], '\n'.join(strings))
-    write(f, gl3w_c)
+def gather_children(node):
+    for c in node.children:
+        if isinstance(c, str):
+            yield c
+        else:
+            yield from gather_children(c)
+
+
+def main():
+    script_dir = os.path.dirname(__file__)
+    parser = argparse.ArgumentParser(description='gl3w generator script')
+    parser.add_argument('--ext', action='store_true', help='Load extensions')
+    parser.add_argument('--root', type=str, default='', help='Root directory')
+    parser.add_argument('--imgui-dir', type=str, default='',
+                        help='Scan Dear ImGui source code and only include used APIs.')
+    args = parser.parse_args()
+
+    # Create symbol whitelist
+    re_fun = re.compile(r'\b(gl[A-Z][a-zA-Z0-9_]+)\b')
+    re_def = re.compile(r'\b(GL_[a-zA-Z0-9_]+)\b')
+    whitelist = set()
+    if args.imgui_dir:
+        # Include extensions, they will be trimmed if unused anyway.
+        args.ext = True
+        for root, dirs, files in os.walk(args.imgui_dir):
+            for file in files:
+                full_path = os.path.join(root, file)
+                if (not full_path.endswith('.h') and not full_path.endswith('.cpp')) or 'opengl3' not in full_path:
+                    continue
+                if file.endswith('imgui_impl_opengl3_loader.h') or file.endswith('gl3w.h'):
+                    continue
+                with open(full_path) as fp:
+                    source_code = fp.read()
+                    for e in re_def.findall(source_code):
+                        whitelist.add(e)
+                    for e in re_fun.findall(source_code):
+                        whitelist.add(e)
+                        whitelist.add('PFN{}PROC'.format(e.upper()))
+
+    # Create directories
+    touch_dir(os.path.join(args.root, 'include/GL'))
+    touch_dir(os.path.join(args.root, 'include/KHR'))
+    touch_dir(os.path.join(args.root, 'src'))
+
+    # Download glcorearb.h and khrplatform.h
+    download('https://www.khronos.org/registry/OpenGL/api/GL/glcorearb.h',
+             os.path.join(args.root, 'include/GL/glcorearb.h'))
+    download('https://www.khronos.org/registry/EGL/api/KHR/khrplatform.h',
+             os.path.join(args.root, 'include/KHR/khrplatform.h'))
+
+    # Parse function names from glcorearb.h
+    print('Parsing glcorearb.h header...')
+    procs = []
+    p = re.compile(r'GLAPI.*APIENTRY\s+(\w+)')
+    d = re.compile(r'#define\s+(GL_[a-zA-Z0-9_]+)\s+(0x)?[0-9A-F]+')
+    f = re.compile(r'\bAPIENTRYP (PFNGL[A-Z0-9]+PROC)\b')
+    glcorearb = IfDefNode()
+    with open(os.path.join(args.root, 'include/GL/glcorearb.h'), 'r') as fp:
+        for line in fp:
+            # Match API
+            m = p.match(line)
+            if m is not None:
+                proc = m.group(1)
+                if (args.ext or not is_ext(proc)) and len(whitelist) == 0 or proc in whitelist:
+                    procs.append(proc)
+                else:
+                    continue
+
+            # Exclude non-whitelisted preprocessor definitions
+            m = d.match(line)
+            if m is not None and len(whitelist) and m.group(1) not in whitelist:
+                continue
+
+            # Exclude non-whitelisted function pointer types
+            m = f.search(line)
+            if m is not None and len(whitelist) and m.group(1) not in whitelist:
+                continue
+
+            line = line.rstrip('\r\n')
+            if line.startswith('#if'):
+                glcorearb = IfDefNode(glcorearb)
+                glcorearb.children.append(line)
+            elif line.startswith('#endif'):
+                glcorearb.children.append(line)
+                glcorearb = glcorearb.parent
+            elif line:
+                glcorearb.children.append(line)
+    procs.sort()
+    assert glcorearb.parent is None
+    cull_empty(glcorearb)                               # Walk parsed glcorearb and cull empty ifdefs
+    glcorearb = '\n'.join(gather_children(glcorearb))   # Reassemble glcorearb.h
+
+    # Generate gl3w.h
+    if args.imgui_dir:
+        output_file = os.path.join(args.imgui_dir, 'backends/imgui_impl_opengl3_loader.h')
+    else:
+        output_file = os.path.join(args.root, 'include/GL/imgui_impl_opengl3_loader.h')
+    print('Generating {0}...'.format(output_file))
+    with open(output_file, 'w+', encoding='utf-8') as fp:
+        h_template = open('{}/template/gl3w.h'.format(script_dir)).read()
+
+        strings = [
+            '/* gl3w internal state */',
+            'union GL3WProcs {',
+            '    GL3WglProc ptr[{0}];'.format(len(procs)),
+            '    struct {'
+        ]
+        max_proc_len = max([len(p) for p in procs]) + 7
+        for proc in procs:
+            strings.append('        {0: <{2}} {1};'.format('PFN{0}PROC'.format(proc.upper()), proc[2:], max_proc_len))
+        strings.append('    } gl;')     # struct
+        strings.append('};')            # union GL3WProcs
+        h_template = h_template.replace(strings[0], '\n'.join(strings))
+
+        strings = ['/* OpenGL functions */']
+        for proc in procs:
+            strings.append('#define {0: <{2}} gl3wProcs.gl.{1}'.format(proc, proc[2:], max_proc_len))
+        h_template = h_template.replace(strings[0], '\n'.join(strings))
+
+        # Embed GL/glcorearb.h
+        h_template = h_template.replace('#include <GL/glcorearb.h>', glcorearb)
+
+        # Remove KHR/khrplatform.h include, we use our own minimal typedefs from it
+        h_template = h_template.replace('#include <KHR/khrplatform.h>', '')
+
+        # Embed gl3w.c
+        strings = ['static const char *proc_names[] = {']
+        for proc in procs:
+            strings.append('    "{0}",'.format(proc))
+        h_template = h_template.replace(strings[0], '\n'.join(strings))
+
+        fp.write(h_template)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
