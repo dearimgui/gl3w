@@ -221,7 +221,7 @@ def main():
 
         strings = ['/* OpenGL functions */']
         for proc in procs:
-            strings.append('#define {0: <{2}} gl3wProcs.gl.{1}'.format(proc, proc[2:], max_proc_len))
+            strings.append('#define {0: <{2}} imgl3wProcs.gl.{1}'.format(proc, proc[2:], max_proc_len))
         h_template = h_template.replace(strings[0], '\n'.join(strings))
 
         # Embed GL/glcorearb.h

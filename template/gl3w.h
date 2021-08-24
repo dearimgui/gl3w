@@ -89,7 +89,7 @@ GL3W_API GL3WglProc imgl3wGetProcAddress(const char *proc);
 
 /* gl3w internal state */
 
-GL3W_API extern union GL3WProcs gl3wProcs;
+GL3W_API extern union GL3WProcs imgl3wProcs;
 
 /* OpenGL functions */
 
@@ -227,13 +227,13 @@ GL3WglProc imgl3wGetProcAddress(const char *proc) { return get_proc(proc); }
 static const char *proc_names[] = {
 };
 
-GL3W_API union GL3WProcs gl3wProcs;
+GL3W_API union GL3WProcs imgl3wProcs;
 
 static void load_procs(GL3WGetProcAddressProc proc)
 {
     size_t i;
     for (i = 0; i < ARRAY_SIZE(proc_names); i++)
-        gl3wProcs.ptr[i] = proc(proc_names[i]);
+        imgl3wProcs.ptr[i] = proc(proc_names[i]);
 }
 
 #ifdef __cplusplus
