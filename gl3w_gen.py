@@ -103,17 +103,9 @@ def main():
     parser = argparse.ArgumentParser(description='gl3w generator script')
     parser.add_argument('--ext', action='store_true', help='Load extensions')
     parser.add_argument('--root', type=str, default='', help='Root directory')
-    parser.add_argument('--include', nargs='+', default=[], help='Scan files or dirs and only include used APIs.')
-    parser.add_argument('--ignore', nargs='+', default=[], help='Exclude specified files or dirs from scanning.')
-    parser.add_argument('--include-symbols', default=[], nargs='+', help='Whitelist additional OpenGL symbols.')
+    parser.add_argument('--ref', nargs='+', default=[], help='Scan files or dirs and only include used APIs.')
     parser.add_argument('--output', default='include/GL/imgui_impl_opengl3_loader.h', help='Output header.')
     args = parser.parse_args()
-
-    for i, directory in enumerate(args.include):
-        args.include[i] = os.path.abspath(directory)
-
-    for i, directory in enumerate(args.ignore):
-        args.ignore[i] = os.path.abspath(directory)
 
     # Create symbol whitelist
     re_fun = re.compile(r'\b(gl[A-Z][a-zA-Z0-9_]+)\b')
@@ -121,32 +113,18 @@ def main():
     re_comments = re.compile(r'//.*?\n|/\*.*?\*/', re.MULTILINE | re.DOTALL)
     whitelist = set()
 
-    for include in args.include_symbols:
-        whitelist.add(include)
-        if re.match('^gl', include) is not None:
-            whitelist.add('PFN{}PROC'.format(include.upper()))  # Also include typedefs for functions
-
     # Include extensions, they will be trimmed if unused anyway.
-    args.ext = args.ext or len(args.include)
-    for imgui_dir in args.include:
-        for root, dirs, files in os.walk(imgui_dir):
-            for file in files:
-                full_path = os.path.join(root, file)
-                if any([full_path.startswith(p) for p in args.ignore]):
-                    continue
-                if not full_path.endswith('.h') and not full_path.endswith('.cpp'):
-                    continue
-                if file.endswith('imgui_impl_opengl3_loader.h') or file.endswith('gl3w.h'):
-                    continue
-                with open(full_path) as fp:
-                    source_code = fp.read()
-                    # Avoid including unused symbols that may appear in comments.
-                    source_code = re_comments.sub('', source_code)
-                    for e in re_def.findall(source_code):
-                        whitelist.add(e)
-                    for e in re_fun.findall(source_code):
-                        whitelist.add(e)
-                        whitelist.add('PFN{}PROC'.format(e.upper()))
+    args.ext = args.ext or len(args.ref)
+    for api_ref in args.ref:
+        with open(api_ref) as fp:
+            source_code = fp.read()
+            # Avoid including unused symbols that may appear in comments.
+            source_code = re_comments.sub('', source_code)
+            for e in re_def.findall(source_code):
+                whitelist.add(e)
+            for e in re_fun.findall(source_code):
+                whitelist.add(e)
+                whitelist.add('PFN{}PROC'.format(e.upper()))
 
     # Create directories
     touch_dir(os.path.join(args.root, 'include/GL'))
