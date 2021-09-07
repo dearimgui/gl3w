@@ -34,6 +34,7 @@
 #define __gl3w_h_
 
 // Adapted from KHR/khrplatform.h to avoid including entire file.
+#ifndef __khrplatform_h_
 typedef          float         khronos_float_t;
 typedef signed   char          khronos_int8_t;
 typedef unsigned char          khronos_uint8_t;
@@ -58,6 +59,7 @@ typedef          uint64_t      khronos_uint64_t;
 typedef signed   long long     khronos_int64_t;
 typedef unsigned long long     khronos_uint64_t;
 #endif
+#endif  // __khrplatform_h_
 
 #include <GL/glcorearb.h>
 
