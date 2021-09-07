@@ -1,3 +1,22 @@
+//-----------------------------------------------------------------------------
+// About imgui_impl_opengl3_loader.h:
+//
+// We embed our own OpenGL loader to not require user to provide their own or to have to use ours,
+// which proved to be endless problems for users.
+// Our loader is custom-generated, based on gl3w but automatically filtered to only include
+// enums/functions that we use in our imgui_impl_opengl3.cpp source file in order to be small.
+//
+// YOU SHOULD NOT NEED TO INCLUDE/USE THIS DIRECTLY. THIS IS USED BY imgui_impl_opengl3.cpp ONLY.
+// THE REST OF YOUR APP SHOULD USE A DIFFERENT GL LOADER: ANY GL LOADER OF YOUR CHOICE.
+//
+// Regenerate with:
+//   python gl3w_gen.py --output ../imgui/backends/imgui_impl_opengl3_loader.h --ref ../imgui/backends/imgui_impl_opengl3.cpp ./extra_symbols.txt
+//
+// More info:
+//   https://github.com/dearimgui/gl3w_stripped
+//   https://github.com/ocornut/imgui/issues/4445
+//-----------------------------------------------------------------------------
+
 /*
  * This file was generated with gl3w_gen.py, part of imgl3w
  * (hosted at https://github.com/dearimgui/gl3w_stripped)
@@ -26,10 +45,6 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-// We embed our own OpenGL loader to not require user to provide their own or to have to use ours, which proved to be endless problems for users.
-// Our loader is custom-generated, based on gl3w but automatically filtered to only include enums/functions that we use in this source file.
-// Regenerate with: python gl3w_gen.py --imgui-dir /path/to/imgui/
-// see https://github.com/dearimgui/gl3w_stripped for more info.
 #ifndef __gl3w_h_
 #define __gl3w_h_
 
