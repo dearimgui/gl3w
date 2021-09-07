@@ -4,3 +4,4 @@ GL_FRAMEBUFFER_SRGB
 glClearColor
 glClear
 GL_COLOR_BUFFER_BIT
+glGetError
