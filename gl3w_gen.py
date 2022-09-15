@@ -105,6 +105,7 @@ def main():
     parser.add_argument('--root', type=str, default='', help='Root directory')
     parser.add_argument('--ref', nargs='+', default=[], help='Scan files or dirs and only include used APIs.')
     parser.add_argument('--output', default='include/GL/imgui_impl_opengl3_loader.h', help='Output header.')
+    parser.add_argument('--symbolprefix', type=str, default='', help='Replace default \'im\' prefix for symbol names.')
     args = parser.parse_args()
 
     # Create symbol whitelist
@@ -213,6 +214,10 @@ def main():
         for proc in procs:
             strings.append('    "{0}",'.format(proc))
         h_template = h_template.replace(strings[0], '\n'.join(strings))
+
+        if args.symbolprefix:
+            h_template = h_template.replace('imgl3w', args.symbolprefix + 'gl3w')
+            h_template = h_template.replace('IMGL3W', args.symbolprefix.upper() + 'GL3W')
 
         fp.write(h_template)
 
