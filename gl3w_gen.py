@@ -186,7 +186,7 @@ def main():
 
         strings = [
             '/* gl3w internal state */',
-            'union GL3WProcs {',
+            'union ImGL3WProcs {',
             '    GL3WglProc ptr[{0}];'.format(len(procs)),
             '    struct {'
         ]
@@ -194,7 +194,7 @@ def main():
         for proc in procs:
             strings.append('        {0: <{2}} {1};'.format('PFN{0}PROC'.format(proc.upper()), proc[2:], max_proc_len))
         strings.append('    } gl;')     # struct
-        strings.append('};')            # union GL3WProcs
+        strings.append('};')            # union ImGL3WProcs
         h_template = h_template.replace(strings[0], '\n'.join(strings))
 
         strings = ['/* OpenGL functions */']
