@@ -232,7 +232,11 @@ static int open_libs(void)
             close_libgl();
     }
 
+    if (is_library_loaded("libGL.so", &libgl))
+        return GL3W_OK;
     if (is_library_loaded("libGL.so.1", &libgl))
+        return GL3W_OK;
+    if (is_library_loaded("libGL.so.3", &libgl))
         return GL3W_OK;
 
     // Neither is already loaded, so we have to load one.  Try EGL first
@@ -247,7 +251,12 @@ static int open_libs(void)
         close_libgl();
 
     // Fall back to legacy libGL, which includes GLX
-    libgl = dlopen("libGL.so.1", RTLD_LAZY | RTLD_LOCAL);
+    // While most systems use libGL.so.1, NetBSD seems to use that libGL.so.3. See https://github.com/ocornut/imgui/issues/6983
+    libgl = dlopen("libGL.so", RTLD_LAZY | RTLD_LOCAL);
+    if (!libgl)
+        libgl = dlopen("libGL.so.1", RTLD_LAZY | RTLD_LOCAL);
+    if (!libgl)
+        libgl = dlopen("libGL.so.3", RTLD_LAZY | RTLD_LOCAL);
 
     if (libgl)
         return GL3W_OK;
